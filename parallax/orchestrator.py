@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 from functools import partial
-from typing import Awaitable, Callable, Iterable
+from typing import Iterable
 
+from parallax.checkpoint import CheckpointWriter
 from parallax.envs.base import Env
-from parallax.envs.base import Rollout
 from parallax.envs.base import RolloutGroup
-from parallax.envs.base import SamplerFn
+from parallax.evaluation import evaluate_envs
+from parallax.evaluation import reward_metrics
+from parallax.evaluation import rollout_group
 from parallax.learner.algorithms import Algorithm
 from parallax.learner.learner import Learner
 from parallax.metrics import MetricsLogger
@@ -32,6 +34,8 @@ class AsyncRLOrchestrator:
         config: AsyncRLConfig,
         metrics_logger: MetricsLogger | None = None,
         eval_envs: Iterable[Env] = (),
+        max_steps: int | None = None,
+        checkpoint_writer: CheckpointWriter | None = None,
     ) -> None:
         self.envs = iter(envs)
         self.eval_envs = eval_envs
@@ -45,6 +49,8 @@ class AsyncRLOrchestrator:
         self.transport = transport
         self.config = config
         self.metrics_logger = metrics_logger
+        self.max_steps = max_steps
+        self.checkpoint_writer = checkpoint_writer
         self.update_step = 0
         self.runtime_stats = RuntimeStats()
         self._rollout_queue_closed = False
@@ -60,8 +66,19 @@ class AsyncRLOrchestrator:
                 task_group.create_task(self._run_envs())
                 for _ in range(self.config.num_env_workers)
             ]
-            task_group.create_task(self._close_rollout_queue(workers))
-            task_group.create_task(self._train(learner_ready))
+            close_queue = task_group.create_task(
+                self._close_rollout_queue(workers)
+            )
+            await self._train(learner_ready)
+            if self.update_step == self.max_steps:
+                for worker in workers:
+                    worker.cancel()
+                close_queue.cancel()
+        if self.max_steps is not None and self.update_step < self.max_steps:
+            raise RuntimeError(
+                f"Training data exhausted at step {self.update_step}; "
+                f"expected {self.max_steps} steps"
+            )
 
     async def _run_envs(self) -> None:
         for env in self.envs:
@@ -89,7 +106,7 @@ class AsyncRLOrchestrator:
             if self.metrics_logger is not None:
                 self.metrics_logger.log_eval_samples(eval_groups, step=0)
                 self.metrics_logger.log(
-                    _reward_metrics("eval", eval_groups),
+                    reward_metrics("eval", eval_groups),
                     step=0,
                 )
         await learner_ready
@@ -104,6 +121,8 @@ class AsyncRLOrchestrator:
             training_groups.append(group)
             if len(training_groups) == self.config.num_groups_per_batch:
                 await self._update(training_groups, sampled_groups)
+                if self.update_step == self.max_steps:
+                    return
                 training_groups = []
                 sampled_groups = []
         if training_groups:
@@ -118,11 +137,23 @@ class AsyncRLOrchestrator:
         with self.runtime_stats.timer("learner_update"):
             learner_metrics = await self.learner.update(batch)
         self.update_step += 1
+        checkpoint_writer = self.checkpoint_writer
+        if checkpoint_writer is not None:
+            checkpoint_elapsed_seconds = checkpoint_writer.elapsed_seconds()
         with self.runtime_stats.timer("weight_transfer"):
             await self.transport.transfer(self.learner, self.sampler)
         self.runtime_stats.record_step()
+        if checkpoint_writer is not None:
+            with self.runtime_stats.timer("checkpoint"):
+                await checkpoint_writer.save(
+                    self.learner,
+                    checkpoint_elapsed_seconds,
+                )
         eval_groups = []
-        if self.update_step % self.config.eval_every_steps == 0:
+        if (
+            self.eval_envs
+            and self.update_step % self.config.eval_every_steps == 0
+        ):
             with self.runtime_stats.timer("evaluation"):
                 eval_groups = await self._evaluate()
             if self.metrics_logger is not None and eval_groups:
@@ -131,8 +162,8 @@ class AsyncRLOrchestrator:
         if self.metrics_logger is not None:
             self.metrics_logger.log(
                 {
-                    **_reward_metrics("rollout", sampled_groups),
-                    **_reward_metrics("eval", eval_groups),
+                    **reward_metrics("rollout", sampled_groups),
+                    **reward_metrics("eval", eval_groups),
                     **{
                         f"runtime/{name}": value
                         for name, value in self.runtime_stats.step_metrics().items()
@@ -160,65 +191,9 @@ class AsyncRLOrchestrator:
         }
 
     async def _evaluate(self) -> list[RolloutGroup]:
-        if not self.eval_envs:
-            return []
-        queue: asyncio.Queue[Env | None] = asyncio.Queue()
-        for env in self.eval_envs:
-            queue.put_nowait(env)
-        for _ in range(self.config.num_eval_workers):
-            queue.put_nowait(None)
-        worker_groups = await asyncio.gather(
-            *(
-                self._eval_worker(queue)
-                for _ in range(self.config.num_eval_workers)
-            )
+        return await evaluate_envs(
+            self.eval_envs,
+            self.sample_fn,
+            self.config.num_eval_generations,
+            self.config.num_eval_workers,
         )
-        return [
-            group
-            for groups in worker_groups
-            for group in groups
-        ]
-
-    async def _eval_worker(
-        self,
-        queue: asyncio.Queue[Env | None],
-    ) -> list[RolloutGroup]:
-        groups = []
-        while (env := await queue.get()) is not None:
-            rollouts = await rollout_group(
-                env.rollout,
-                self.sample_fn,
-                self.config.num_eval_generations,
-            )
-            groups.append(env.score(rollouts))
-        return groups
-
-
-async def rollout_group(
-    rollout: Callable[[SamplerFn], Awaitable[Rollout]],
-    sample_fn: SamplerFn,
-    num_generations: int,
-) -> list[Rollout]:
-    return await asyncio.gather(
-        *(rollout(sample_fn) for _ in range(num_generations))
-    )
-
-
-def _reward_metrics(
-    prefix: str,
-    groups: list[RolloutGroup],
-) -> dict[str, float]:
-    if not groups:
-        return {}
-    rewards = [reward for group in groups for reward in group.rewards]
-    group_size = len(groups[0].rewards)
-    return {
-        f"{prefix}/reward_mean": sum(rewards) / len(rewards),
-        f"{prefix}/pass@1": sum(reward == 1.0 for reward in rewards)
-        / len(rewards),
-        f"{prefix}/pass@{group_size}": sum(
-            any(reward == 1.0 for reward in group.rewards)
-            for group in groups
-        )
-        / len(groups),
-    }

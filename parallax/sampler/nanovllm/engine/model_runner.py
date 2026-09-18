@@ -85,6 +85,13 @@ class ModelRunner:
         self.weight_receiver.receive()
         dist.barrier()
 
+    @torch.inference_mode()
+    def load_checkpoint(self, path: str) -> None:
+        """Replace model weights from a local Safetensors checkpoint."""
+        load_model(self.model, path, pin_memory=True)
+        torch.cuda.synchronize()
+        dist.barrier()
+
     def close_weight_transfer(self) -> None:
         self.weight_receiver.close()
 

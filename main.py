@@ -20,11 +20,12 @@ def main() -> None:
         type=Path,
         default=Path("configs/qwen3-0.6b-cispo.toml"),
     )
+    parser.add_argument("--speedrun", action="store_true")
     args = parser.parse_args()
     config_path = args.config.resolve()
     assert config_path.is_file()
     assert config_path.suffix == ".toml"
-    launch(config_path)
+    launch(config_path, speedrun=args.speedrun)
 
 
 if __name__ == "__main__":

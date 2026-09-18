@@ -134,6 +134,12 @@ class InferenceGateway:
         for replica in self.replicas:
             replica.connection.recv()
 
+    def load_checkpoint(self, path: str) -> None:
+        for replica in self.replicas:
+            replica.connection.send(("load_checkpoint", (path,)))
+        for replica in self.replicas:
+            replica.connection.recv()
+
     def close_weight_transfer(self) -> None:
         for replica in self.replicas:
             replica.connection.send(("close_weight_transfer", ()))

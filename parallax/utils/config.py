@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import field
 from pathlib import Path
 import tomllib
 
@@ -91,6 +92,13 @@ class WandbConfig:
 
 
 @dataclass(slots=True)
+class SpeedrunConfig:
+    steps: int = 100
+    eval_last_n: int = 10
+    target_pass_at_1: float = 0.9
+
+
+@dataclass(slots=True)
 class Config:
     model: ModelConfig
     learner: LearnerConfig
@@ -99,6 +107,7 @@ class Config:
     async_rl: AsyncRLConfig
     transport: TransportConfig | None = None
     wandb: WandbConfig | None = None
+    speedrun: SpeedrunConfig = field(default_factory=SpeedrunConfig)
 
     @classmethod
     def from_toml(cls, path: str | Path) -> Config:
@@ -107,6 +116,7 @@ class Config:
 
         transport = data.get("transport")
         wandb = data.get("wandb")
+        speedrun = data.get("speedrun")
         async_rl = data["async_rl"]
         sampling = async_rl.pop("sampling")
         return cls(
@@ -120,4 +130,5 @@ class Config:
             ),
             transport=TransportConfig(**transport) if transport else None,
             wandb=WandbConfig(**wandb) if wandb else None,
+            speedrun=SpeedrunConfig(**(speedrun or {})),
         )
