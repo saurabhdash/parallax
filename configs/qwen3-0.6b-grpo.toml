@@ -1,0 +1,54 @@
+[model]
+name = "Qwen/Qwen3-0.6B"
+
+[learner]
+fsdp_size = 2
+tensor_parallel_size = 1
+learning_rate = 1e-6
+param_dtype = "float32"
+weight_decay = 0.0
+max_grad_norm = 1.0
+gradient_accumulation_steps = 4
+
+[sampler]
+num_replicas = 6
+tensor_parallel_size = 1
+max_model_len = 4096
+
+[algorithm]
+name = "grpo"
+advantage_epsilon = 1e-8
+clip_epsilon_low = 0.1
+clip_epsilon_high = 0.2
+
+[async_rl]
+# Training prompts sampled concurrently.
+num_env_workers = 24
+# Completions sampled for each prompt.
+num_generations = 8
+# Completions sampled for each evaluation prompt.
+num_eval_generations = 8
+# Valid sequences per learner update: 128 / 8 = 16 prompt groups.
+learner_batch_size = 128
+# Completed rollout groups buffered for the learner.
+rollout_queue_capacity = 24
+# Fixed held-out prompts to be evaluated.
+num_eval_examples = 32
+# Evaluation prompts sampled concurrently.
+num_eval_workers = 32
+# Learner updates between evaluations.
+eval_every_steps = 10
+# Permit a weight update between decode steps of an active rollout.
+enable_mixed_rollouts = true
+
+[async_rl.sampling]
+temperature = 1.0
+max_tokens = 4000
+ignore_eos = false
+
+[transport]
+kind = "m2n"
+
+[wandb]
+project = "parallax-dev"
+base_url = "https://api.wandb.ai"

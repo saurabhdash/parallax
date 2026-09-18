@@ -1,0 +1,47 @@
+[model]
+name = "Qwen/Qwen3-0.6B"
+
+[learner]
+fsdp_size = 1
+tensor_parallel_size = 1
+learning_rate = 1e-6
+param_dtype = "float32"
+weight_decay = 0.0
+max_grad_norm = 1.0
+# Preserve the default configuration's per-GPU learner microbatch size.
+gradient_accumulation_steps = 8
+
+[sampler]
+num_replicas = 3
+tensor_parallel_size = 1
+max_model_len = 4096
+
+[algorithm]
+name = "cispo"
+advantage_epsilon = 1e-8
+importance_ratio_cap = 2.0
+
+[async_rl]
+# Preserve four concurrent training prompts per sampler replica.
+num_env_workers = 12
+num_generations = 8
+num_eval_generations = 8
+# Valid sequences per learner update: 128 / 8 = 16 prompt groups.
+learner_batch_size = 128
+rollout_queue_capacity = 12
+num_eval_examples = 32
+num_eval_workers = 12
+eval_every_steps = 10
+enable_mixed_rollouts = true
+
+[async_rl.sampling]
+temperature = 1.0
+max_tokens = 4000
+ignore_eos = false
+
+[transport]
+kind = "m2n"
+
+[wandb]
+project = "parallax-dev"
+base_url = "https://api.wandb.ai"

@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "parallax-sampler"
+version = "0.1.0"
+license = "MIT"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "numpy",
+    "torch==2.8.0+cu128",
+    "triton>=3.0.0",
+    "tqdm",
+    "transformers>=4.51.0",
+    "huggingface-hub",
+    "flash-attn @ https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3.post1/flash_attn-2.8.3.post1%2Bcu12torch2.8cxx11abiTRUE-cp312-cp312-linux_x86_64.whl",
+    "xxhash",
+    "fastapi>=0.141.1",
+    "uvicorn>=0.52.4",
+    "nccl-extensions[cu12]==0.1.0",
+]
+
+[tool.uv]
+override-dependencies = ["nvidia-nccl-cu12==2.30.7"]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["nanovllm*"]

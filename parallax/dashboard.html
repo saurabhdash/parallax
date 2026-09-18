@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Parallax</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.min.css">
+  <style>
+    :root {
+      --background: #f4f3ef;
+      --panel: #ffffff;
+      --border: #deddd7;
+      --border-soft: #ecebe6;
+      --muted: #70726d;
+      --text: #20221f;
+      --green: #347956;
+      --blue: #3d6f9e;
+      --amber: #a86e24;
+      --red: #a64f46;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--text);
+      font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+      font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased;
+    }
+    main {
+      width: min(1440px, calc(100% - 48px));
+      margin: 0 auto;
+      padding: 34px 0 52px;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 22px;
+    }
+    .brand { display: flex; align-items: baseline; gap: 10px; }
+    h1 { margin: 0; font-size: 23px; letter-spacing: -0.035em; }
+    .subtitle, .chart-note { color: var(--muted); }
+    .connection {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--amber);
+    }
+    .connected .dot { background: var(--green); }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 18px;
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .control { display: flex; align-items: center; gap: 4px; }
+    .control-label {
+      margin-right: 5px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    button {
+      padding: 5px 9px;
+      border: 0;
+      border-radius: 5px;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    button:hover { background: var(--background); color: var(--text); }
+    button.active { background: var(--text); color: #ffffff; }
+    #inspection {
+      min-width: 0;
+      margin-left: auto;
+      overflow: hidden;
+      color: var(--muted);
+      font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      overflow: hidden;
+      margin-bottom: 12px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .stat {
+      min-width: 0;
+      padding: 16px 18px;
+      border-left: 1px solid var(--border-soft);
+    }
+    .stat:first-child { border-left: 0; }
+    .label { color: var(--muted); font-size: 12px; }
+    .value {
+      margin-top: 7px;
+      overflow: hidden;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 22px;
+      letter-spacing: -0.04em;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #phase { font-size: 16px; letter-spacing: -0.02em; }
+    .charts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .chart {
+      min-width: 0;
+      padding: 18px 18px 12px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .chart.wide { grid-column: 1 / -1; }
+    .chart-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    h2 { margin: 0; font-size: 14px; letter-spacing: -0.01em; }
+    .chart-note { font-size: 11px; }
+    .plot { width: 100%; min-height: 248px; }
+    .activity-lane {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr);
+      align-items: center;
+      border-top: 1px solid var(--border-soft);
+    }
+    .activity-lane:first-of-type { border-top: 0; }
+    .activity-label {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .activity-plot { width: 100%; min-height: 86px; }
+    .uplot { font-family: inherit; }
+    .u-legend {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      text-align: left;
+    }
+    .u-legend .u-series { margin-right: 15px; }
+    .u-legend .u-value {
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    @media (max-width: 1080px) {
+      .summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .stat:nth-child(4) { border-left: 0; }
+      .stat:nth-child(n + 4) { border-top: 1px solid var(--border-soft); }
+      #inspection { flex-basis: 100%; margin-left: 0; }
+    }
+    @media (max-width: 760px) {
+      main { width: min(100% - 24px, 1440px); padding-top: 24px; }
+      .charts { grid-template-columns: 1fr; }
+      .chart.wide { grid-column: auto; }
+      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stat:nth-child(odd) { border-left: 0; }
+      .stat:nth-child(n + 3) { border-top: 1px solid var(--border-soft); }
+      .subtitle { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="brand">
+        <h1>Parallax</h1>
+        <span class="subtitle">Runtime monitor</span>
+      </div>
+      <div id="connection" class="connection">
+        <span class="dot"></span>
+        <span>connecting</span>
+      </div>
+    </header>
+
+    <section class="toolbar" aria-label="Chart controls">
+      <div class="control" id="rangeControl">
+        <span class="control-label">Range</span>
+        <button data-range="60">1m</button>
+        <button data-range="300" class="active">5m</button>
+        <button data-range="900">15m</button>
+        <button data-range="3600">1h</button>
+      </div>
+      <div class="control" id="resolutionControl">
+        <span class="control-label">Resolution</span>
+        <button data-resolution="auto" class="active">Auto</button>
+        <button data-resolution="0">Raw</button>
+        <button data-resolution="1">1s</button>
+        <button data-resolution="5">5s</button>
+        <button data-resolution="30">30s</button>
+      </div>
+      <button id="resetZoom" hidden>Reset zoom</button>
+      <div id="inspection">Click any chart to pin its values. Drag to zoom.</div>
+    </section>
+
+    <section class="summary" aria-label="Runtime summary">
+      <div class="stat"><div class="label">Learner step</div><div id="step" class="value">—</div></div>
+      <div class="stat"><div class="label">Current phase</div><div id="phase" class="value">—</div></div>
+      <div class="stat"><div class="label">Rollout queue</div><div id="rolloutQueue" class="value">—</div></div>
+      <div class="stat"><div class="label">Client inflight</div><div id="clientInflight" class="value">—</div></div>
+      <div class="stat"><div class="label">Sampler queued</div><div id="samplerQueued" class="value">—</div></div>
+      <div class="stat"><div class="label">Sampler active</div><div id="samplerActive" class="value">—</div></div>
+    </section>
+
+    <section class="charts">
+      <article class="chart">
+        <div class="chart-heading">
+          <h2>Rollout queue</h2>
+          <span class="chart-note">groups waiting</span>
+        </div>
+        <div id="rollouts" class="plot"></div>
+      </article>
+      <article class="chart">
+        <div class="chart-heading">
+          <h2>Sampler requests</h2>
+          <span class="chart-note">request flow</span>
+        </div>
+        <div id="requests" class="plot"></div>
+      </article>
+      <article class="chart">
+        <div class="chart-heading">
+          <h2>Decode throughput</h2>
+          <span class="chart-note">tokens / second</span>
+        </div>
+        <div id="throughput" class="plot"></div>
+      </article>
+      <article class="chart">
+        <div class="chart-heading">
+          <h2>Inter-step latency</h2>
+          <span class="chart-note">seconds</span>
+        </div>
+        <div id="stepLatency" class="plot"></div>
+      </article>
+      <article class="chart wide">
+        <div class="chart-heading">
+          <h2>Pipeline activity</h2>
+          <span class="chart-note">0 idle · 1 active</span>
+        </div>
+        <div class="activity-lane">
+          <span class="activity-label">Learner</span>
+          <div id="activityLearner" class="activity-plot"></div>
+        </div>
+        <div class="activity-lane">
+          <span class="activity-label">Transport</span>
+          <div id="activityTransport" class="activity-plot"></div>
+        </div>
+        <div class="activity-lane">
+          <span class="activity-label">Eval</span>
+          <div id="activityEval" class="activity-plot"></div>
+        </div>
+      </article>
+      <article class="chart wide">
+        <div class="chart-heading">
+          <h2>GPU utilization</h2>
+          <span class="chart-note">percent</span>
+        </div>
+        <div id="gpus" class="plot"></div>
+      </article>
+      <article class="chart wide">
+        <div class="chart-heading">
+          <h2>GPU memory</h2>
+          <span class="chart-note">MiB used</span>
+        </div>
+        <div id="gpuMemory" class="plot"></div>
+      </article>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.iife.min.js"></script>
+  <script>
+    const colors = [
+      "#347956",
+      "#3d6f9e",
+      "#a86e24",
+      "#a64f46",
+      "#307875",
+      "#71823f",
+      "#956742",
+      "#667078",
+    ];
+    const history = [];
+    const plots = new Map();
+    let historySize = 7200;
+    let sampleInterval = 0.5;
+    let rangeSeconds = 300;
+    let resolution = "auto";
+    let zoom = null;
+    let gpuCount = 0;
+
+    const fixedSpecs = [
+      {
+        id: "rollouts",
+        title: "Rollout queue",
+        series: [
+          { label: "queued", key: "rollout_queue_size", color: colors[0] },
+        ],
+      },
+      {
+        id: "requests",
+        title: "Sampler requests",
+        series: [
+          { label: "inflight", key: "client_inflight_requests", color: colors[1] },
+          { label: "queued", key: "sampler_queued_requests", color: colors[2] },
+          { label: "active", key: "sampler_active_requests", color: colors[3] },
+        ],
+      },
+      {
+        id: "throughput",
+        title: "Decode throughput",
+        series: [
+          {
+            label: "tokens / second",
+            key: "sampler_tokens_per_second",
+            color: colors[1],
+          },
+        ],
+      },
+      {
+        id: "stepLatency",
+        title: "Inter-step latency",
+        series: [
+          { label: "latency", key: "inter_step_seconds", color: colors[0] },
+          { label: "mean", key: "inter_step_mean_seconds", color: colors[1] },
+          { label: "std", key: "inter_step_std_seconds", color: colors[2] },
+        ],
+      },
+      {
+        id: "activityLearner",
+        title: "Learner activity",
+        binary: true,
+        height: 86,
+        showXAxis: false,
+        series: [{
+          label: "learner",
+          color: colors[0],
+          value: point => Number(point.phase === "learner_update"),
+        }],
+      },
+      {
+        id: "activityTransport",
+        title: "Transport activity",
+        binary: true,
+        height: 86,
+        showXAxis: false,
+        series: [{
+          label: "transport",
+          color: colors[2],
+          value: point => Number(point.phase === "weight_transfer"),
+        }],
+      },
+      {
+        id: "activityEval",
+        title: "Eval activity",
+        binary: true,
+        height: 110,
+        series: [{
+          label: "eval",
+          color: colors[1],
+          value: point => Number(point.phase === "evaluation"),
+        }],
+      },
+    ];
+
+    function text(id, value) {
+      document.getElementById(id).textContent = value;
+    }
+
+    function timeLabel(timestamp) {
+      return new Date(timestamp * 1000).toLocaleTimeString([], {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+    }
+
+    function visiblePoints() {
+      if (!history.length) return [];
+      const latest = history[history.length - 1].timestamp;
+      const start = zoom === null ? latest - rangeSeconds : zoom[0];
+      const end = zoom === null ? latest : zoom[1];
+      const first = history.findIndex(point => point.timestamp >= start);
+      const from = first < 0 ? history.length - 1 : Math.max(0, first - 1);
+      return history
+        .slice(from)
+        .filter(point => point.timestamp <= end);
+    }
+
+    function sampledPoints(points) {
+      if (!points.length) return [];
+      const duration = points[points.length - 1].timestamp - points[0].timestamp;
+      const seconds = (
+        resolution === "auto"
+          ? Math.max(sampleInterval, duration / 900)
+          : Number(resolution)
+      );
+      if (seconds <= sampleInterval) return points;
+
+      const sampled = [];
+      let bucket = null;
+      for (const point of points) {
+        const nextBucket = Math.floor(point.timestamp / seconds);
+        if (nextBucket !== bucket) {
+          sampled.push(point);
+          bucket = nextBucket;
+        } else {
+          sampled[sampled.length - 1] = point;
+        }
+      }
+      return sampled;
+    }
+
+    function gpuSpec() {
+      return {
+        id: "gpus",
+        title: "GPU utilization",
+        maximum: 100,
+        series: Array.from({ length: gpuCount }, (_, index) => ({
+          label: `GPU ${index}`,
+          key: `gpu_${index}`,
+          color: colors[index % colors.length],
+          value: point => point.gpu_utilization[index] ?? 0,
+        })),
+      };
+    }
+
+    function gpuMemorySpec() {
+      return {
+        id: "gpuMemory",
+        title: "GPU memory",
+        series: Array.from({ length: gpuCount }, (_, index) => ({
+          label: `GPU ${index}`,
+          key: `gpu_memory_${index}`,
+          color: colors[index % colors.length],
+          value: point => point.gpu_memory_used[index] ?? 0,
+        })),
+      };
+    }
+
+    function options(spec, element) {
+      const stepped = spec.binary ? uPlot.paths.stepped({ align: 1 }) : null;
+      return {
+        width: element.clientWidth,
+        height: spec.height ?? 248,
+        padding: [8, 8, 0, 0],
+        scales: {
+          x: { time: true },
+          y: spec.binary
+            ? { range: [0, 1] }
+            : {
+                range: (_, minimum, maximum) => [
+                  Math.min(0, minimum),
+                  spec.maximum ?? Math.max(1, maximum * 1.08),
+                ],
+              },
+        },
+        axes: [
+          {
+            show: spec.showXAxis ?? true,
+            stroke: "#777873",
+            grid: { stroke: "#e9e8e2", width: 1 },
+            ticks: { stroke: "#d5d4ce", width: 1 },
+            values: (_, ticks) => ticks.map(timeLabel),
+            font: "10px ui-monospace",
+          },
+          {
+            stroke: "#777873",
+            grid: { stroke: "#e9e8e2", width: 1 },
+            ticks: { stroke: "#d5d4ce", width: 1 },
+            values: spec.binary
+              ? (_, ticks) => ticks.map(value => (
+                  value === 0 || value === 1 ? String(value) : ""
+                ))
+              : undefined,
+            font: "10px ui-monospace",
+            size: 48,
+          },
+        ],
+        cursor: {
+          sync: { key: "parallax" },
+          drag: { x: true, y: false, setScale: false },
+        },
+        legend: { show: !spec.binary, live: true },
+        series: [
+          {},
+          ...spec.series.map(series => ({
+            label: series.label,
+            stroke: series.color,
+            width: 1.6,
+            points: { show: false },
+            paths: stepped ?? undefined,
+            value: (_, value) => (
+              value === null || value === undefined
+                ? "—"
+                : spec.binary
+                  ? String(value)
+                  : Number(value).toFixed(1)
+            ),
+          })),
+        ],
+        hooks: {
+          setSelect: [
+            plot => {
+              if (plot.select.width < 8) return;
+              zoom = [
+                plot.posToVal(plot.select.left, "x"),
+                plot.posToVal(plot.select.left + plot.select.width, "x"),
+              ];
+              document.getElementById("resetZoom").hidden = false;
+              renderCharts();
+              plot.setSelect({ left: 0, width: 0 }, false);
+            },
+          ],
+        },
+      };
+    }
+
+    function data(spec, points) {
+      return [
+        points.map(point => point.timestamp),
+        ...spec.series.map(series => points.map(point => (
+          series.value ? series.value(point) : point[series.key] ?? 0
+        ))),
+      ];
+    }
+
+    function phaseDuration(points, series, index) {
+      const state = series.value(points[index]);
+      let first = index;
+      let last = index;
+      while (first > 0 && series.value(points[first - 1]) === state) first--;
+      while (
+        last + 1 < points.length
+        && series.value(points[last + 1]) === state
+      ) last++;
+      if (state === 0) return null;
+      const start = points[first].phase_started_at;
+      const end = (
+        last + 1 < points.length
+          ? points[last + 1].phase_started_at
+          : points[last].timestamp
+      );
+      return Math.max(0, end - start);
+    }
+
+    function inspect(spec, plot, points) {
+      const index = plot.cursor.idx;
+      if (index === null || index === undefined || !points[index]) return;
+      const timestamp = timeLabel(points[index].timestamp);
+      const values = spec.series.map(series => {
+        const value = series.value
+          ? series.value(points[index])
+          : points[index][series.key] ?? 0;
+        const duration = spec.binary
+          ? phaseDuration(points, series, index)
+          : null;
+        return `${series.label}: y=${value}${duration === null ? "" : `, Δt=${duration.toFixed(1)}s`}`;
+      });
+      text("inspection", `${spec.title} · x=${timestamp} · ${values.join(" · ")}`);
+    }
+
+    function ensurePlot(spec, points) {
+      const existing = plots.get(spec.id);
+      if (existing !== undefined) {
+        existing.points = points;
+        existing.plot.setData(data(spec, points));
+        return;
+      }
+
+      const element = document.getElementById(spec.id);
+      const entry = {
+        spec,
+        points,
+        element,
+        plot: new uPlot(options(spec, element), data(spec, points), element),
+      };
+      entry.plot.over.addEventListener(
+        "click",
+        () => inspect(entry.spec, entry.plot, entry.points),
+      );
+      plots.set(spec.id, entry);
+    }
+
+    function renderCharts() {
+      const exactPoints = visiblePoints();
+      if (!exactPoints.length) return;
+      const reducedPoints = sampledPoints(exactPoints);
+      const nextGpuCount = exactPoints[exactPoints.length - 1].gpu_utilization.length;
+      if (nextGpuCount !== gpuCount) {
+        gpuCount = nextGpuCount;
+        for (const id of ["gpus", "gpuMemory"]) {
+          const existing = plots.get(id);
+          if (existing !== undefined) {
+            existing.plot.destroy();
+            plots.delete(id);
+          }
+        }
+      }
+      for (const spec of [...fixedSpecs, gpuSpec(), gpuMemorySpec()]) {
+        ensurePlot(spec, spec.binary ? exactPoints : reducedPoints);
+      }
+    }
+
+    function renderSummary(point) {
+      text("step", point.learner_step);
+      text("phase", `${point.phase} · ${point.phase_elapsed_seconds.toFixed(1)}s`);
+      text("rolloutQueue", point.rollout_queue_size);
+      text("clientInflight", point.client_inflight_requests);
+      text("samplerQueued", point.sampler_queued_requests);
+      text("samplerActive", point.sampler_active_requests);
+    }
+
+    function selectButton(group, selected) {
+      for (const button of group.querySelectorAll("button")) {
+        button.classList.toggle("active", button === selected);
+      }
+    }
+
+    document.getElementById("rangeControl").addEventListener("click", event => {
+      if (event.target.dataset.range === undefined) return;
+      rangeSeconds = Number(event.target.dataset.range);
+      zoom = null;
+      document.getElementById("resetZoom").hidden = true;
+      selectButton(event.currentTarget, event.target);
+      renderCharts();
+    });
+
+    document
+      .getElementById("resolutionControl")
+      .addEventListener("click", event => {
+        if (event.target.dataset.resolution === undefined) return;
+        resolution = event.target.dataset.resolution;
+        selectButton(event.currentTarget, event.target);
+        renderCharts();
+      });
+
+    document.getElementById("resetZoom").addEventListener("click", () => {
+      zoom = null;
+      document.getElementById("resetZoom").hidden = true;
+      renderCharts();
+    });
+
+    new ResizeObserver(() => {
+      for (const entry of plots.values()) {
+        entry.plot.setSize({
+          width: entry.element.clientWidth,
+          height: entry.spec.height ?? 248,
+        });
+      }
+    }).observe(document.querySelector(".charts"));
+
+    const connection = document.getElementById("connection");
+    const stream = new EventSource("/events");
+    stream.onopen = () => {
+      connection.classList.add("connected");
+      connection.lastElementChild.textContent = "live";
+    };
+    stream.onerror = () => {
+      connection.classList.remove("connected");
+      connection.lastElementChild.textContent = "reconnecting";
+    };
+    stream.onmessage = event => {
+      const message = JSON.parse(event.data);
+      if (message.history !== undefined) {
+        historySize = message.history_size;
+        sampleInterval = message.sample_interval;
+        history.splice(0, history.length, ...message.history);
+      } else if (
+        !history.length
+        || message.sample > history[history.length - 1].sample
+      ) {
+        history.push(message);
+        if (history.length > historySize) history.shift();
+      }
+      if (history.length) {
+        renderSummary(history[history.length - 1]);
+        renderCharts();
+      }
+    };
+  </script>
+</body>
+</html>
