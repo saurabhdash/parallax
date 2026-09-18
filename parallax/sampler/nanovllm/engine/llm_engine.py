@@ -61,6 +61,9 @@ class LLMEngine:
     def update_weights(self) -> None:
         self.model_runner.call("update_weights")
 
+    def load_checkpoint(self, path: str) -> None:
+        self.model_runner.call("load_checkpoint", path)
+
     def close_weight_transfer(self) -> None:
         self.model_runner.call("close_weight_transfer")
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -60,6 +61,13 @@ class SamplerClient:
         response = await self.client.post(
             "/update_weights",
             json={"version": version},
+        )
+        response.raise_for_status()
+
+    async def load_checkpoint(self, path: Path) -> None:
+        response = await self.client.post(
+            "/load_checkpoint",
+            json={"path": str(path.resolve())},
         )
         response.raise_for_status()
 

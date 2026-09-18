@@ -108,6 +108,25 @@ comparing end-to-end training time while keeping the original code minimal.
 Comparisons should use the same model, task, target, and checked-in speedrun
 configuration, and should report the hardware used.
 
+## Run a speedrun
+
+```bash
+uv run python main.py --config configs/qwen3-0.6b-cispo.toml --speedrun
+```
+
+The `[speedrun]` config sets the number of training steps, number of final
+checkpoints to evaluate, and target pass@1. Training skips evaluation and saves
+one timed checkpoint per learner update. It then shuts down the training
+processes and launches a fresh sampler that loads the first evaluation
+checkpoint normally and swaps the remaining checkpoints in place. Results are
+written to `runs/speedrun-*/speedrun-result.json`.
+
+### Speedrun baselines
+
+| Model | Task | Target pass@1 | Observed pass@1 | Step | Time including setup |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Qwen3-0.6B | 5×5 multiplication | ≥0.8 | 0.8242 | 102 | 1810.356s |
+
 ## Live dashboard
 
 Training serves a live performance dashboard at

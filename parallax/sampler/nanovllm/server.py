@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import os
+from pathlib import Path
 
 from fastapi import FastAPI
 from huggingface_hub import snapshot_download
@@ -102,6 +103,11 @@ class InferenceServer:
             await self.update_weights(request["version"])
             return {"ok": True, "weight_version": self.weight_version}
 
+        @self.app.post("/load_checkpoint")
+        async def load_checkpoint(request: dict):
+            await self.load_checkpoint(request["path"])
+            return {"ok": True}
+
         @self.app.post("/teardown")
         async def teardown():
             await self.teardown()
@@ -174,7 +180,12 @@ class InferenceServer:
     ):
         assert self.gateway is None
         self.enable_mixed_rollouts = enable_mixed_rollouts
-        model_path = await asyncio.to_thread(snapshot_download, repo_id=model)
+        local_model_path = Path(model).expanduser()
+        model_path = (
+            str(local_model_path.resolve())
+            if local_model_path.is_dir()
+            else await asyncio.to_thread(snapshot_download, repo_id=model)
+        )
         self.m2n_unique_id = bytes(nccl.get_unique_id().as_bytes)
         self.gateway = await asyncio.to_thread(
             InferenceGateway,
@@ -285,6 +296,25 @@ class InferenceServer:
         self.prepared_manifest = None
         self.sampling_enabled.set()
         self.update_lock.release()
+
+    async def load_checkpoint(self, path: str) -> None:
+        if self.gateway is None:
+            raise RuntimeError("Sampler is not initialized")
+        if self.m2n_connected:
+            raise RuntimeError("Cannot load a checkpoint while M2N is connected")
+        checkpoint = Path(path).resolve()
+        if not checkpoint.is_dir():
+            raise ValueError(f"Checkpoint does not exist: {checkpoint}")
+
+        async with self.update_lock:
+            await self.pause_sampling()
+            try:
+                await asyncio.to_thread(
+                    self.gateway.load_checkpoint,
+                    str(checkpoint),
+                )
+            finally:
+                self.sampling_enabled.set()
 
     async def teardown(self):
         if self.gateway is None:
